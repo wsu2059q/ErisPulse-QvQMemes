@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ErisPulse-QvQMemes"
+version = "0.1.1"
+description = "ErisPulse 表情包系统插件：自动收录打标签、语义选图发送 —— 全智能零概率（QvQChat 伴侣模块）"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "ErisPulse>=2.8.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+]
+
+[project.urls]
+"homepage" = "https://github.com/wsu2059q/ErisPulse-QvQMemes"
+"Issues" = "https://github.com/wsu2059q/ErisPulse-QvQMemes/issues"
+
+[project.entry-points."erispulse.module"]
+"QvQMemes" = "QvQMemes:Main"
+
+[tool.setuptools.packages.find]
+include = ["QvQMemes*"]
+
+# uv 配置
+[[tool.uv.index]]
+url = "https://mirrors.aliyun.com/pypi/simple"
+default = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
