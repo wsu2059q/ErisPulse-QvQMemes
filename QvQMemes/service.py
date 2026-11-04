@@ -1,0 +1,218 @@
+"""对外五服务（ServiceMixin，混入 Main）：send_sticker / sticker_search /
+sticker_stats / sticker_add / qvq_settings。
+
+约定（生态桥自动把服务注册为 QvQChat AI 工具）：
+- 所有服务输出 str/dict，**绝不抛异常**——任何内部错误都转成可读文本/错误
+  字段返回给模型；
+- ``send_sticker`` 的服务 description 即「何时发」的唯一引导：语义选图工具，
+  判断权完全交给模型，本模块不做任何概率触发；
+- ``qvq_settings`` 只作归属标记（返回 ``{"title": ...}``）：配置项由本模块
+  ConfigClass（_desc 声明式）声明，QvQChat 端经框架 resolve_config_schema
+  自动渲染表单；值合并读取走 ``QvQChat.plugin_config``（Main.on_load 拉取，
+  失败静默用默认）。
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from . import texts
+from .library import UNTAGGED
+
+
+class ServiceMixin:
+    """五服务实现（依赖宿主 Main 提供 sdk/logger/_cfg/_library/_collector/_setting/_spawn）。"""
+
+    # ==================== send_sticker（AI 语义选图工具） ====================
+
+    async def send_sticker(self, query: str = "", platform: str = "",
+                           target_id: str = "", target_type: str = "group", **_) -> str:
+        """根据语义描述从表情包库挑选最优一张并发送。
+
+        search 最优 → ``adapter.Send.To(...).<send_method>(ref)`` → mark_used →
+        「已发送：<desc>」；无匹配返回可用标签提示模型换词；任何失败返回错误文本。
+        """
+        try:
+            query = str(query or "").strip()
+            platform = str(platform or "").strip()
+            target_id = str(target_id or "").strip()
+            target_type = str(target_type or "group").strip() or "group"
+            if not query:
+                return texts.t("send_need_query")
+            if not platform or not target_id:
+                return texts.t("send_need_target")
+
+            lib = self._library()
+            hits = lib.search(query, top_n=1)
+            if not hits:
+                hints = "、".join(lib.tag_cloud(6))
+                if not hints:
+                    return texts.t("library_empty")
+                return texts.t("send_no_match", query=query, tags=hints)
+            best = hits[0]
+
+            ref = self._send_ref(best)
+            if not ref:
+                return texts.t("send_failed", error="sticker has neither path nor url")
+
+            adapter = None
+            try:
+                adapter = self.sdk.adapter.get(platform)
+            except Exception:
+                adapter = None
+            if adapter is None:
+                return texts.t("adapter_not_found", platform=platform)
+
+            method = str(self._setting("send_method", "Image") or "Image")
+            chain = adapter.Send.To(target_type, target_id)
+            send_call = getattr(chain, method, None)
+            if not callable(send_call):
+                return texts.t("send_failed",
+                               error=f"SendDSL method {method} not supported on {platform}")
+            result = await send_call(ref)
+            lib.mark_used(str(best.get("id")))
+            lib.evict_to_limit()
+
+            desc = str(best.get("desc") or "") or "/".join(str(t) for t in (best.get("tags") or []))
+            body = texts.t("send_sent", desc=desc)
+            try:
+                tail = str(result or "").strip()
+            except Exception:
+                tail = ""
+            if tail and tail != body:
+                body = f"{body}\n{tail[:200]}"
+            return body
+        except Exception as e:
+            return texts.t("send_failed", error=e)
+
+    @staticmethod
+    def _send_ref(entry: dict) -> str:
+        """发送引用：本地文件存在优先（免再下载），否则回退 URL。"""
+        path = str(entry.get("path") or "")
+        if path:
+            try:
+                if Path(path).is_file():
+                    return path
+            except Exception:
+                pass
+        return str(entry.get("url") or "")
+
+    # ==================== sticker_search ====================
+
+    async def sticker_search(self, query: str = "", top_n: int = 5, **_) -> dict:
+        """语义检索（不发图）：按相关度返回 top_n 条目，供模型/编排预览选图。"""
+        try:
+            query = str(query or "").strip()
+            try:
+                top_n = max(1, int(top_n or 5))
+            except (TypeError, ValueError):
+                top_n = 5
+            lib = self._library()
+            if not query:
+                return {"query": "", "count": 0, "results": [],
+                        "tag_hints": lib.tag_cloud(8)}
+            hits = lib.search(query, top_n=top_n)
+            return {
+                "query": query,
+                "count": len(hits),
+                "results": [
+                    {
+                        "id": h.get("id"),
+                        "desc": h.get("desc"),
+                        "tags": h.get("tags"),
+                        "score": h.get("score"),
+                        "url": h.get("url"),
+                        "path": h.get("path"),
+                        "uses": h.get("uses"),
+                    }
+                    for h in hits
+                ],
+                "tag_hints": lib.tag_cloud(8) if not hits else [],
+            }
+        except Exception as e:
+            return {"query": str(query or ""), "count": 0, "results": [], "error": str(e)}
+
+    # ==================== sticker_stats ====================
+
+    async def sticker_stats(self, **_) -> dict:
+        """库统计：总量/上限/未分类数/今日新增/标签分布/最常用。"""
+        try:
+            return self._library().stats()
+        except Exception as e:
+            return {"error": str(e)}
+
+    # ==================== sticker_add ====================
+
+    async def sticker_add(self, url: str = "", path: str = "", desc: str = "",
+                          tags: str = "", **_) -> str:
+        """手动收录（URL 或本地路径；desc/tags 可省——省则走视觉打标签）。"""
+        try:
+            url = str(url or "").strip()
+            path = str(path or "").strip()
+            desc = str(desc or "").strip()
+            tags = str(tags or "").strip()
+            ref = url or path
+            if not ref:
+                return texts.t("sticker_add_failed", error="url or path required")
+
+            collector = self._collector()
+            result = await collector.collect_url(ref, source="manual")
+            entry = result.get("entry")
+            if not result.get("added") and entry is not None:
+                old_desc = str(entry.get("desc") or "") or UNTAGGED
+                return texts.t("sticker_duplicated", id=entry.get("id"), desc=old_desc)
+            if entry is None:
+                return texts.t("sticker_add_failed",
+                               error=str(result.get("error") or "collect failed"))
+
+            entry_id = str(entry.get("id"))
+            if desc or tags:
+                fields: dict = {}
+                if desc:
+                    fields["desc"] = desc
+                if tags:
+                    fields["tags"] = tags
+                updated = self._library().update(entry_id, **fields) or entry
+                return texts.t("sticker_added_static", id=entry_id,
+                               desc=updated.get("desc") or UNTAGGED,
+                               tags=" ".join(updated.get("tags") or [UNTAGGED]))
+            if self._setting("tag_via_vision", True):
+                collector._after_added(entry)  # spawn 视觉打标签
+                return texts.t("sticker_added", id=entry_id, source="manual")
+            return texts.t("sticker_added_static", id=entry_id, desc=UNTAGGED,
+                           tags=UNTAGGED)
+        except Exception as e:
+            return texts.t("sticker_add_failed", error=e)
+
+    # ==================== qvq_settings（归属标记，QvQChat 约定） ====================
+
+    async def qvq_settings(self, **_) -> dict:
+        """归属标记：只有返回该服务的模块才出现在 QvQChat 设置页插件分区。
+
+        配置项由本模块 ConfigClass 声明（框架 schema 自动呈现），不再逐条导出 items。
+        """
+        return {"title": texts.t("settings_title")}
+
+    # ==================== qvq_schemas（参数级 schema，QvQChat 生态桥约定） ====================
+
+    async def qvq_schemas(self, **_) -> dict:
+        """返回服务的参数级 schema：生态桥优先用它覆盖「从签名推导」的弱schema。"""
+        from .Main import SCHEMAS
+
+        return {name: dict(schema) for name, schema in SCHEMAS.items()}
+
+    # ==================== qvq_access（访问级别自声明，QvQChat 生态桥约定） ====================
+
+    async def qvq_access(self, **_) -> dict:
+        """返回各服务的访问级别：safe=所有成员可用（发表情/检索/统计），admin=仅管理员（写库）。"""
+        from .Main import ACCESS
+
+        return dict(ACCESS)
+
+    # ==================== qvq_extensions（统一扩展入口，QvQChat 约定） ====================
+
+    async def qvq_extensions(self, **_) -> dict:
+        """向 QvQChat 注入表情包使用建议（提示词），AI 自行判断是否发送。"""
+        from .Main import EXTENSION_PROMPTS
+
+        return {"prompts": [dict(item) for item in EXTENSION_PROMPTS]}
