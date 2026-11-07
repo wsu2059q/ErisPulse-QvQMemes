@@ -45,7 +45,7 @@ from .collect import Collector
 from .library import StickerLibrary
 from .service import ServiceMixin
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 OBSERVE_EVENT = "qvq.observe"
 
