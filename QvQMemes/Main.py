@@ -270,6 +270,16 @@ class Main(BaseModule, ServiceMixin):
             self.logger.warning(texts.t("observe_register_failed", event=OBSERVE_EVENT, error=e))
 
         self.library.evict_to_limit()
+
+        # Dashboard 视窗自注册（宿主在才挂；uninstall 路径在 on_unload teardown）
+        try:
+            from .dashboard import DashboardIntegration
+
+            self._dash = DashboardIntegration(self)
+            if self._dash.setup():
+                self.logger.info("dashboard view registered (group=qvq)")
+        except Exception as e:
+            self.logger.warning(f"dashboard setup skipped: {e}")
         return True
 
     async def on_unload(self, event) -> bool:
@@ -279,6 +289,12 @@ class Main(BaseModule, ServiceMixin):
             except Exception:
                 pass
             self._observe_registered = False
+        dash = getattr(self, "_dash", None)
+        if dash is not None:
+            try:
+                dash.teardown()
+            except Exception:
+                pass
         if self.collector is not None:
             try:
                 await self.collector.shutdown()
