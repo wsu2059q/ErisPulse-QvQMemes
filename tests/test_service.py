@@ -225,12 +225,14 @@ class TestMeta:
         info = meta if isinstance(meta, dict) else vars(meta)
         names = [s["name"] for s in info["services"]]
         assert names == ["send_sticker", "sticker_search", "sticker_stats",
-                         "sticker_add", "qvq_settings", "qvq_schemas", "qvq_access",
+                         "sticker_add", "sticker_list", "sticker_update",
+                         "sticker_remove", "sticker_image",
+                         "qvq_settings", "qvq_schemas", "qvq_access",
                          "qvq_extensions"]
         send = next(s for s in SERVICES if s["name"] == "send_sticker")
         assert send["description"] == ("根据语义描述从表情包库挑选并发送表情包；"
                                        "适合轻松/调侃/情绪表达场景，正式任务慎用")
-        assert QvQMemes.__version__ == "0.1.2"
+        assert QvQMemes.__version__ == "0.1.3"
 
     def test_coerce(self):
         assert Main._coerce("10", "int") == 10

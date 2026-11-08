@@ -21,6 +21,14 @@ from pathlib import Path
 from . import texts
 from .library import UNTAGGED
 
+# 图片扩展名 → HTTP mime（Dashboard 图片代理响应头用）
+_IMAGE_MIMES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+                ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp"}
+
+
+def _image_mime(suffix: str) -> str:
+    return _IMAGE_MIMES.get(str(suffix or "").lower(), "image/png")
+
 
 class ServiceMixin:
     """五服务实现（依赖宿主 Main 提供 sdk/logger/_cfg/_library/_collector/_setting/_spawn）。"""
@@ -251,122 +259,70 @@ class ServiceMixin:
         from .Main import EXTENSION_PROMPTS
 
         return {"prompts": [dict(item) for item in EXTENSION_PROMPTS]}
-    # ==================== sticker_search ====================
+    # ==================== 库管理服务（QvQChat Dashboard 表情包视窗代理调用） ====================
 
-    async def sticker_search(self, query: str = "", top_n: int = 5, **_) -> dict:
-        """语义检索（不发图）：按相关度返回 top_n 条目，供模型/编排预览选图。"""
+    async def sticker_list(self, query: str = "", limit: int = 300, **_) -> dict:
+        """全量/检索式列表（管理视窗）：query 空则全量（库序），非空走语义检索。"""
         try:
-            query = str(query or "").strip()
             try:
-                top_n = max(1, int(top_n or 5))
+                limit = max(1, min(int(limit or 300), 1000))
             except (TypeError, ValueError):
-                top_n = 5
+                limit = 300
             lib = self._library()
-            if not query:
-                return {"query": "", "count": 0, "results": [],
-                        "tag_hints": lib.tag_cloud(8)}
-            hits = lib.search(query, top_n=top_n)
-            return {
-                "query": query,
-                "count": len(hits),
-                "results": [
-                    {
-                        "id": h.get("id"),
-                        "desc": h.get("desc"),
-                        "tags": h.get("tags"),
-                        "score": h.get("score"),
-                        "url": h.get("url"),
-                        "path": h.get("path"),
-                        "uses": h.get("uses"),
-                    }
-                    for h in hits
-                ],
-                "tag_hints": lib.tag_cloud(8) if not hits else [],
-            }
+            query = str(query or "").strip()
+            items = lib.search(query, top_n=limit) if query else lib.list(limit=limit)
+            return {"count": len(items), "items": items}
         except Exception as e:
-            return {"query": str(query or ""), "count": 0, "results": [], "error": str(e)}
+            return {"count": 0, "items": [], "error": str(e)}
 
-    # ==================== sticker_stats ====================
-
-    async def sticker_stats(self, **_) -> dict:
-        """库统计：总量/上限/未分类数/今日新增/标签分布/最常用。"""
+    async def sticker_update(self, entry_id: str = "", desc: str = "", tags: str = "", **_) -> dict:
+        """编辑条目（desc/tags）。"""
         try:
-            return self._library().stats()
+            entry_id = str(entry_id or "").strip()
+            if not entry_id:
+                return {"ok": False, "error": "entry_id required"}
+            fields: dict = {}
+            if desc is not None:
+                fields["desc"] = str(desc or "").strip()
+            if tags is not None:
+                fields["tags"] = str(tags or "").strip()
+            updated = self._library().update(entry_id, **fields)
+            if updated is None:
+                return {"ok": False, "error": "not found"}
+            return {"ok": True, "entry": updated}
         except Exception as e:
-            return {"error": str(e)}
+            return {"ok": False, "error": str(e)}
 
-    # ==================== sticker_add ====================
-
-    async def sticker_add(self, url: str = "", path: str = "", desc: str = "",
-                          tags: str = "", **_) -> str:
-        """手动收录（URL 或本地路径；desc/tags 可省——省则走视觉打标签）。"""
+    async def sticker_remove(self, entry_id: str = "", delete_file: bool = True, **_) -> dict:
+        """删除条目（默认连带删除本地文件）。"""
         try:
-            url = str(url or "").strip()
-            path = str(path or "").strip()
-            desc = str(desc or "").strip()
-            tags = str(tags or "").strip()
-            ref = url or path
-            if not ref:
-                return texts.t("sticker_add_failed", error="url or path required")
+            removed = self._library().remove(str(entry_id or "").strip(),
+                                             delete_file=bool(delete_file))
+            if removed is None:
+                return {"ok": False, "error": "not found"}
+            return {"ok": True, "removed": removed.get("id")}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
 
-            collector = self._collector()
-            result = await collector.collect_url(ref, source="manual")
-            entry = result.get("entry")
-            if not result.get("added") and entry is not None:
-                old_desc = str(entry.get("desc") or "") or UNTAGGED
-                return texts.t("sticker_duplicated", id=entry.get("id"), desc=old_desc)
+    async def sticker_image(self, entry_id: str = "", **_) -> dict:
+        """图片载荷（Dashboard 代理展示用）：本地文件转 base64；URL 条目回跳地址。"""
+        import base64
+        from pathlib import Path
+
+        try:
+            entry = self._library().get(str(entry_id or "").strip())
             if entry is None:
-                return texts.t("sticker_add_failed",
-                               error=str(result.get("error") or "collect failed"))
-
-            entry_id = str(entry.get("id"))
-            if desc or tags:
-                fields: dict = {}
-                if desc:
-                    fields["desc"] = desc
-                if tags:
-                    fields["tags"] = tags
-                updated = self._library().update(entry_id, **fields) or entry
-                return texts.t("sticker_added_static", id=entry_id,
-                               desc=updated.get("desc") or UNTAGGED,
-                               tags=" ".join(updated.get("tags") or [UNTAGGED]))
-            if self._setting("tag_via_vision", True):
-                collector._after_added(entry)  # spawn 视觉打标签
-                return texts.t("sticker_added", id=entry_id, source="manual")
-            return texts.t("sticker_added_static", id=entry_id, desc=UNTAGGED,
-                           tags=UNTAGGED)
+                return {"ok": False, "error": "not found"}
+            path = str(entry.get("path") or "").strip()
+            url = str(entry.get("url") or "").strip()
+            if path and not path.startswith(("http://", "https://")):
+                file = Path(path).expanduser()
+                if file.is_file():
+                    return {"ok": True, "mime": _image_mime(file.suffix),
+                            "data": base64.b64encode(file.read_bytes()).decode("ascii")}
+            if url:
+                return {"ok": True, "url": url}
+            return {"ok": False, "error": "no image source"}
         except Exception as e:
-            return texts.t("sticker_add_failed", error=e)
+            return {"ok": False, "error": str(e)}
 
-    # ==================== qvq_settings（归属标记，QvQChat 约定） ====================
-
-    async def qvq_settings(self, **_) -> dict:
-        """归属标记：只有返回该服务的模块才出现在 QvQChat 设置页插件分区。
-
-        配置项由本模块 ConfigClass 声明（框架 schema 自动呈现），不再逐条导出 items。
-        """
-        return {"title": texts.t("settings_title")}
-
-    # ==================== qvq_schemas（参数级 schema，QvQChat 生态桥约定） ====================
-
-    async def qvq_schemas(self, **_) -> dict:
-        """返回服务的参数级 schema：生态桥优先用它覆盖「从签名推导」的弱schema。"""
-        from .Main import SCHEMAS
-
-        return {name: dict(schema) for name, schema in SCHEMAS.items()}
-
-    # ==================== qvq_access（访问级别自声明，QvQChat 生态桥约定） ====================
-
-    async def qvq_access(self, **_) -> dict:
-        """返回各服务的访问级别：safe=所有成员可用（发表情/检索/统计），admin=仅管理员（写库）。"""
-        from .Main import ACCESS
-
-        return dict(ACCESS)
-
-    # ==================== qvq_extensions（统一扩展入口，QvQChat 约定） ====================
-
-    async def qvq_extensions(self, **_) -> dict:
-        """向 QvQChat 注入表情包使用建议（提示词），AI 自行判断是否发送。"""
-        from .Main import EXTENSION_PROMPTS
-
-        return {"prompts": [dict(item) for item in EXTENSION_PROMPTS]}

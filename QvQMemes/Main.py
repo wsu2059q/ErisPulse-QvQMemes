@@ -45,7 +45,7 @@ from .collect import Collector
 from .library import StickerLibrary
 from .service import ServiceMixin
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 
 OBSERVE_EVENT = "qvq.observe"
 
@@ -72,6 +72,26 @@ SERVICES = [
         "name": "sticker_add",
         "description": "手动收录表情包（URL 或本地路径）；desc/tags 可省，省则走视觉模型自动打标签",
         "signature": "(url: str = '', path: str = '', desc: str = '', tags: str = '') -> str",
+    },
+    {
+        "name": "sticker_list",
+        "description": "表情包库列表（QvQChat Dashboard 表情包视窗代理调用）：query 空=全量，非空=语义检索",
+        "signature": "(query: str = '', limit: int = 300) -> dict",
+    },
+    {
+        "name": "sticker_update",
+        "description": "编辑表情包条目的描述与标签（Dashboard 管理视窗用）",
+        "signature": "(entry_id: str = '', desc: str = '', tags: str = '') -> dict",
+    },
+    {
+        "name": "sticker_remove",
+        "description": "删除表情包条目（默认连带删除本地文件；Dashboard 管理视窗用）",
+        "signature": "(entry_id: str = '', delete_file: bool = True) -> dict",
+    },
+    {
+        "name": "sticker_image",
+        "description": "表情包图片载荷（base64 或 URL；Dashboard 图片代理展示用）",
+        "signature": "(entry_id: str = '') -> dict",
     },
     {
         "name": "qvq_settings",
@@ -117,6 +137,11 @@ ACCESS = {
     "sticker_search": "safe",
     "sticker_stats": "safe",
     "sticker_add": "admin",
+# 库管理服务：仅 Dashboard 管理视窗（QvQChat 代理）与管理员
+    "sticker_list": "admin",
+    "sticker_update": "admin",
+    "sticker_remove": "admin",
+    "sticker_image": "admin",
 }
 
 # qvq_schemas：参数级说明（仅靠签名推导时模型只知道参数名，不知道 query 该写什么）
