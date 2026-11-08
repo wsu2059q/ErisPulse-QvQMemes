@@ -232,7 +232,7 @@ class TestMeta:
         send = next(s for s in SERVICES if s["name"] == "send_sticker")
         assert send["description"] == ("根据语义描述从表情包库挑选并发送表情包；"
                                        "适合轻松/调侃/情绪表达场景，正式任务慎用")
-        assert QvQMemes.__version__ == "0.1.3"
+        assert QvQMemes.__version__ == "0.1.4"
 
     def test_coerce(self):
         assert Main._coerce("10", "int") == 10

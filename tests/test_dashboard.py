@@ -69,8 +69,10 @@ def test_setup_registers_view_and_routes():
     assert integration.setup() is True
     view = sdk.Dashboard.views.get("QvQMemes")
     assert view and view["group"] == "qvq" and view["group_title"]
-    assert view["iframe_url"] == "/QvQMemes/view"
-    assert ("QvQMemes", "/view", "GET") in sdk.router.routes
+# 内联模式：页面活在宿主 DOM（复用原生组件），无独立 iframe 页面路由
+    assert view["html_content"] and view["js_content"] and view["css_content"]
+    assert view["loader"] == "QvqMemesViewInit"
+    assert ("QvQMemes", "/view", "GET") not in sdk.router.routes
     assert ("QvQMemes", "/api/data", "GET") in sdk.router.routes
     assert ("QvQMemes", "/api/img", "GET") in sdk.router.routes
     integration.teardown()
@@ -118,11 +120,11 @@ def test_data_and_save_and_delete_flow():
     assert deleted["ok"] is True
 
 
-def test_view_page_returns_html():
-    import asyncio
+def test_inline_js_uses_host_globals_and_bearer():
+    """内联 JS 消费宿主全局（TK/esc/confirm2/toast）与 Bearer 头，无自带 token 链。"""
+    import QvQMemes.dashboard as dash_mod
 
-    integration, main, sdk = make_dash()
-    from starlette.responses import HTMLResponse
-
-    resp = asyncio.run(integration._view_page(_Req()))
-    assert isinstance(resp, HTMLResponse) and "QvQMemes/api/data" in resp.body.decode()
+    assert "localStorage.getItem(TK)" in dash_mod._JS
+    assert "Authorization" in dash_mod._JS and "confirm2" in dash_mod._JS
+    assert "ep-input" in dash_mod._HTML and "page-title" in dash_mod._HTML
+    assert ".qvm-" in dash_mod._CSS and "var(--bd)" in dash_mod._CSS

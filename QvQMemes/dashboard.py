@@ -19,7 +19,6 @@ HTTP 路由（页面/数据 API/图片代理），不依赖也不侵入 QvQChat�
 
 from __future__ import annotations
 
-import base64
 import html as _html
 import secrets
 
@@ -46,290 +45,184 @@ def _esc(text) -> str:
 
 # 单页（服务端内联 CSS/JS；文案 zh/en 按 navigator.language 切换；
 # 令牌链复刻 QvQChat view 页：宿主 localStorage → URL ?token= → 自管缓存）
-VIEW_HTML = """<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>QvQMemes</title>
-<style>
-:root {
-  --bg: #f6f7f9; --surface: #ffffff; --tx: #26313d; --tx-s: #5b6b7c; --tx-t: #96a1ad;
-  --bd: #e5e8ec; --bd-h: #d0d6dd; --accent: #3aa5dc; --accent-fill: #2f93cd;
-  --accent-soft: rgba(58,165,220,.14); --danger: #e04f7c;
-}
-[data-theme="dark"] { --bg:#0f1115; --surface:#1c2027; --tx:#e6e9f0; --tx-s:#98a2b0; --tx-t:#5f6875;
-  --bd:#272c35; --bd-h:#343b47; --accent:#74d0f5; --accent-fill:#2f93cd; --accent-soft:rgba(116,208,245,.16);
-  --danger:#ff93ac; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#0f1115; --surface:#1c2027;
-  --tx:#e6e9f0; --tx-s:#98a2b0; --tx-t:#5f6875; --bd:#272c35; --bd-h:#343b47;
-  --accent:#74d0f5; --accent-fill:#2f93cd; --accent-soft:rgba(116,208,245,.16); --danger:#ff93ac; } }
-* { box-sizing: border-box; }
-body { margin:0; padding:18px; background:var(--bg); color:var(--tx);
-  font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; }
-.stats { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
-.stat { background:var(--surface); border:1px solid var(--bd); border-radius:12px; padding:10px 18px; min-width:96px; }
-.stat b { display:block; font-size:20px; }
-.stat span { font-size:12px; color:var(--tx-s); }
-.toolbar { display:flex; gap:10px; margin-bottom:14px; }
-input { font:inherit; color:var(--tx); background:var(--surface); border:1px solid var(--bd);
-  border-radius:9px; padding:8px 12px; outline:none; }
-input:focus-visible, button:focus-visible, select:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
-#search { flex:1; max-width:340px; }
-button { font:inherit; font-weight:600; color:#fff; background:var(--accent-fill); border:none;
-  border-radius:9px; padding:8px 14px; cursor:pointer; }
-button.ghost { background:var(--surface); color:var(--tx-s); border:1px solid var(--bd); }
-button.ghost:hover { border-color:var(--accent); color:var(--accent); background:var(--accent-soft); }
-button.danger { background:transparent; color:var(--danger); border:1px solid var(--bd); }
-button:hover { filter:brightness(1.06); }
-.grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; }
-.card { display:flex; flex-direction:column; gap:6px; padding:10px; background:var(--surface);
-  border:1px solid var(--bd); border-radius:12px; min-width:0; }
-.card img { width:100%; height:110px; object-fit:contain; background:var(--bg); border-radius:8px; }
-.desc { font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.tags { display:flex; flex-wrap:wrap; gap:4px; min-height:18px; }
-.tag { font-size:10px; padding:1px 7px; border-radius:999px; background:var(--accent-soft); color:var(--accent); }
-.acts { display:flex; gap:6px; }
-.acts button { flex:1; padding:4px 6px; font-size:11px; }
-.empty { padding:40px; text-align:center; color:var(--tx-s); border:1px dashed var(--bd); border-radius:12px; }
-#login { position:fixed; inset:0; background:var(--bg); display:none; align-items:center; justify-content:center; }
-#login .box { background:var(--surface); border:1px solid var(--bd); border-radius:14px; padding:26px; max-width:340px; }
-#login input { width:100%; margin:8px 0 12px; }
-.hint { font-size:12px; color:var(--tx-t); margin-top:10px; }
-</style>
-</head>
-<body data-theme="dark">
-<div id="login"><div class="box">
-  <b data-t="login_title">需要访问令牌</b>
-  <input type="password" id="login-token" data-ph="login_ph" placeholder="粘贴 Dashboard 令牌" />
-  <button id="login-btn" data-t="login_btn">验证并进入</button>
-  <div class="hint" data-t="login_hint">令牌可从 Dashboard 设置页复制；验证后仅保存在本浏览器。</div>
-</div></div>
-<div class="stats" id="stats"></div>
-<div class="toolbar">
-  <input id="search" data-ph="search_ph" placeholder="搜索描述/标签…" />
-  <button id="add" data-t="add">收录</button>
+_HTML = """
+<h1 class="page-title" data-i18n="qvqm_title">表情包管理</h1>
+<p class="page-desc" data-i18n="qvqm_desc">表情包库（QvQMemes）：群内图片自动收录，AI 视觉打标并拒收截图等非表情内容</p>
+<div class="stat-grid" id="qvm-stats" style="margin-bottom:14px"></div>
+<div class="qvm-toolbar">
+  <input id="qvm-search" class="ep-input" data-i18n-ph="qvqm_search" placeholder="搜索描述/标签…" />
+  <button id="qvm-add" class="btn btn-primary" data-i18n="qvqm_add">收录</button>
 </div>
-<div class="grid" id="grid"><div class="empty" data-t="loading">加载中…</div></div>
-<script>
-(function () {
-  "use strict";
-  var zh = (navigator.language || "zh-CN").indexOf("zh") === 0;
-  var T = {
-    login_title: zh ? "需要访问令牌" : "Access token required",
-    login_ph: zh ? "粘贴 Dashboard 令牌" : "Paste the Dashboard token",
-    login_btn: zh ? "验证并进入" : "Verify & enter",
-    login_hint: zh ? "令牌可从 Dashboard 设置页复制；验证后仅保存在本浏览器。" :
-      "Copy the token from the Dashboard settings page; it is stored in this browser only.",
-    search_ph: zh ? "搜索描述/标签…" : "Search description/tags…",
-    add: zh ? "收录" : "Add",
-    loading: zh ? "加载中…" : "Loading…",
-    unavailable: zh ? "库不可用（视觉模型或存储异常）" : "Library unavailable",
-    empty: zh ? "表情包库是空的：群里发图会自动收录，或点「收录」手动添加。" :
-      "The library is empty: images posted in chats are collected automatically, or click Add.",
-    edit: zh ? "编辑" : "Edit", del: zh ? "删除" : "Delete", save: zh ? "保存" : "Save",
-    cancel: zh ? "取消" : "Cancel", del_confirm: zh ? "删除这条表情包？本地文件一并删除。" :
-      "Delete this sticker? The local file is removed too.",
-    desc_label: zh ? "描述" : "Description", tags_label: zh ? "标签（空格分隔）" : "Tags (space separated)",
-    untagged: zh ? "未分类" : "untagged", saved: zh ? "已保存" : "Saved",
-    deleted: zh ? "已删除" : "Deleted", tagged: zh ? "已打标" : "Tagged",
-    autofill: zh ? "AI 打标" : "AI tag", add_url: zh ? "图片 URL" : "Image URL",
-    add_desc: zh ? "描述（留空则 AI 打标）" : "Description (empty = AI tagging)",
-    add_hint: zh ? "收录后 desc/tags 留空将走视觉模型自动打标签。" :
-      "Empty desc/tags triggers automatic vision tagging.",
-    stat_total: zh ? "总量" : "Total", stat_cap: zh ? "上限" : "Capacity",
-    stat_untagged: zh ? "未分类" : "Untagged", stat_today: zh ? "今日" : "Today",
-    err: zh ? "出错" : "Error"
-  };
-  document.querySelectorAll("[data-t]").forEach(function (n) { n.textContent = T[n.getAttribute("data-t")] || n.textContent; });
-  document.querySelectorAll("[data-ph]").forEach(function (n) { n.placeholder = T[n.getAttribute("data-ph")] || n.placeholder; });
-
-  var TOKEN = "";
-  function stripUrlToken() {
-    try {
-      if (!window.location.search || window.location.search.indexOf("token=") < 0) return;
-      var clean = window.location.search.replace(/([?&])token=[^&]*&?/i, "$1").replace(/[?&]$/, "");
-      window.history.replaceState(null, "", window.location.pathname + clean + window.location.hash);
-    } catch (e) {}
-  }
-  function candidates() {
-    var list = [];
-    try { var t = localStorage.getItem("__ep_tk__"); if (t) list.push(t); } catch (e) {}
-    try {
-      var m = window.location.search.match(/[?&]token=([^&]+)/);
-      if (m) list.push(decodeURIComponent(m[1]));
-    } catch (e) {}
-    try { var own = localStorage.getItem("qvq_memes_token"); if (own) list.push(own); } catch (e) {}
-    return list;
-  }
-  function api(path, opts) {
-    opts = opts || {};
-    opts.headers = Object.assign({ "Authorization": "Bearer " + TOKEN }, opts.headers || {});
-    return fetch(path, opts).then(function (r) {
-      if (r.status === 401) { showLogin(); throw new Error("unauthorized"); }
-      return r.json();
-    });
-  }
-  function showLogin() { document.getElementById("login").style.display = "flex"; }
-  function resolveToken() {
-    var list = candidates();
-    if (!list.length) { showLogin(); return Promise.resolve(false); }
-    var idx = 0;
-    function tryNext() {
-      if (idx >= list.length) { showLogin(); return Promise.resolve(false); }
-      var t = list[idx++];
-      TOKEN = t;
-      return fetch("/QvQMemes/api/auth", { headers: { "Authorization": "Bearer " + t } })
-        .then(function (r) {
-          if (r.ok) {
-            try { localStorage.setItem("qvq_memes_token", t); } catch (e) {}
-            stripUrlToken();
-            return true;
-          }
-          return tryNext();
-        })
-        .catch(function () { return tryNext(); });
-    }
-    return tryNext();
-  }
-  document.getElementById("login-btn").onclick = function () {
-    var v = document.getElementById("login-token").value.trim();
-    if (!v) return;
-    TOKEN = v;
-    fetch("/QvQMemes/api/auth", { headers: { "Authorization": "Bearer " + v } }).then(function (r) {
-      if (r.ok) {
-        try { localStorage.setItem("qvq_memes_token", v); } catch (e) {}
-        document.getElementById("login").style.display = "none";
-        render(document.getElementById("search").value.trim());
-      } else { alert(T.err); }
-    });
-  };
-
-  function imgSrc(id) { return "/QvQMemes/api/img?id=" + encodeURIComponent(id) + "&token=" + encodeURIComponent(TOKEN); }
-  function esc(s) { var d = document.createElement("div"); d.textContent = String(s || ""); return d.innerHTML; }
-
-  function render(query) {
-    var grid = document.getElementById("grid");
-    grid.innerHTML = '<div class="empty">' + esc(T.loading) + "</div>";
-    api("/QvQMemes/api/data?query=" + encodeURIComponent(query || "")).then(function (data) {
-      if (data.available === false) { grid.innerHTML = '<div class="empty">' + esc(T.unavailable) + "</div>"; return; }
-      var st = data.stats || {};
-      var statsHtml = [["stat_total", st.total], ["stat_cap", st.capacity], ["stat_untagged", st.untagged], ["stat_today", st.today]]
-        .filter(function (p) { return p[1] != null; })
-        .map(function (p) { return '<div class="stat"><b>' + esc(p[1]) + '</b><span>' + esc(T[p[0]]) + "</span></div>"; }).join("");
-      document.getElementById("stats").innerHTML = statsHtml;
-      var items = data.items || [];
-      if (!items.length) { grid.innerHTML = '<div class="empty">' + esc(T.empty) + "</div>"; return; }
-      grid.innerHTML = items.map(function (it) {
-        var tags = (it.tags || []).map(function (tg) { return '<span class="tag">' + esc(tg) + "</span>"; }).join("");
-        var desc = it.desc || T.untagged;
-        return '<div class="card" data-id="' + esc(it.id) + '">' +
-          '<img loading="lazy" src="' + imgSrc(it.id) + '" alt=""/>' +
-          '<div class="desc" title="' + esc(desc) + '">' + esc(desc) + "</div>" +
-          '<div class="tags">' + tags + "</div>" +
-          '<div class="acts"><button data-act="edit">' + esc(T.edit) + '</button>' +
-          '<button data-act="auto">' + esc(T.autofill) + '</button>' +
-          '<button data-act="del" class="danger">' + esc(T.del) + "</button></div></div>";
-      }).join("");
-      grid.querySelectorAll(".card").forEach(function (card) {
-        var id = card.getAttribute("data-id");
-        var item = items.filter(function (x) { return String(x.id) === String(id); })[0] || {};
-        card.querySelector('[data-act="edit"]').onclick = function () { openEditor(item); };
-        card.querySelector('[data-act="del"]').onclick = function () {
-          if (!confirm(T.del_confirm)) return;
-          api("/QvQMemes/api/delete", { method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id: id }) }).then(function (r) {
-            if (r && r.ok) { render(document.getElementById("search").value.trim()); } else { alert((r && r.error) || T.err); }
-          });
-        };
-        card.querySelector('[data-act="auto"]').onclick = function () {
-          var btn = card.querySelector('[data-act="auto"]');
-          btn.disabled = true;
-          api("/QvQMemes/api/autofill", { method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id: id }) }).then(function (r) {
-            btn.disabled = false;
-            if (r && r.ok) { render(document.getElementById("search").value.trim()); }
-            else { alert((r && r.error) || T.err); }
-          }, function () { btn.disabled = false; });
-        };
-      });
-    }, function () { grid.innerHTML = '<div class="empty">' + esc(T.err) + "</div>"; });
-  }
-
-  function modal(title, bodyHtml, onSave) {
-    var mask = document.createElement("div");
-    mask.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:99";
-    mask.innerHTML = '<div style="background:var(--surface);border:1px solid var(--bd);border-radius:14px;padding:22px;width:min(420px,92vw)">' +
-      '<b>' + esc(title) + '</b><div style="margin-top:12px">' + bodyHtml + '</div>' +
-      '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">' +
-      '<button class="ghost" data-c>' + esc(T.cancel) + '</button><button data-s>' + esc(T.save) + "</button></div></div>";
-    document.body.appendChild(mask);
-    mask.querySelector("[data-c]").onclick = function () { mask.remove(); };
-    mask.querySelector("[data-s]").onclick = function () { onSave(mask, function () { mask.remove(); }); };
-    return mask;
-  }
-
-  function openEditor(item) {
-    var mask = modal(T.edit,
-      '<label class="hint">' + esc(T.desc_label) + '</label><input id="m-desc" style="width:100%" value="' + esc(item.desc || "") + '"/>' +
-      '<label class="hint">' + esc(T.tags_label) + '</label><input id="m-tags" style="width:100%" value="' + esc((item.tags || []).join(" ")) + '"/>',
-      function (mask, close) {
-        api("/QvQMemes/api/save", { method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: item.id, desc: mask.querySelector("#m-desc").value, tags: mask.querySelector("#m-tags").value }) })
-          .then(function (r) {
-            if (r && r.ok) { close(); render(document.getElementById("search").value.trim()); }
-            else { alert((r && r.error) || T.err); }
-          });
-      });
-    var d = mask.querySelector("#m-desc");
-    if (d) d.focus();
-  }
-
-  document.getElementById("add").onclick = function () {
-    modal(T.add,
-      '<label class="hint">' + esc(T.add_url) + '</label><input id="m-url" style="width:100%" placeholder="https://…/sticker.png"/>' +
-      '<label class="hint">' + esc(T.desc_label) + '</label><input id="m-desc" style="width:100%" placeholder="' + esc(T.add_desc) + '"/>' +
-      '<label class="hint">' + esc(T.tags_label) + '</label><input id="m-tags" style="width:100%" placeholder="tag1 tag2"/>' +
-      '<div class="hint">' + esc(T.add_hint) + "</div>",
-      function (mask, close) {
-        var url = mask.querySelector("#m-url").value.trim();
-        if (!url) return;
-        api("/QvQMemes/api/save", { method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url: url, desc: mask.querySelector("#m-desc").value, tags: mask.querySelector("#m-tags").value }) })
-          .then(function (r) {
-            if (r && r.ok) { close(); render(""); }
-            else { alert((r && (r.error || r.message)) || T.err); }
-          });
-      });
-  };
-
-  var timer = 0;
-  document.getElementById("search").oninput = function () {
-    clearTimeout(timer);
-    timer = setTimeout(function () { render(document.getElementById("search").value.trim()); }, 300);
-  };
-
-  // 主题跟随宿主（同源 iframe 读父页 data-theme）
-  try {
-    var parentDoc = window.parent && window.parent.document;
-    if (parentDoc) {
-      var apply = function () {
-        var dt = parentDoc.documentElement.getAttribute("data-theme") || "";
-        if (dt) document.documentElement.setAttribute("data-theme", dt);
-      };
-      apply();
-      new MutationObserver(apply).observe(parentDoc.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-    }
-  } catch (e) {}
-
-  resolveToken().then(function (ok) { if (ok) render(""); });
-})();
-</script>
-</body>
-</html>
+<div class="card"><div class="card-body" style="padding:12px">
+  <div class="qvm-grid" id="qvm-grid"><div class="qvm-empty">…</div></div>
+</div></div>
 """
 
-# 视窗标题五语言（宿主 register_view 的 titles 形态）
+_CSS = """
+.qvm-toolbar { display:flex; gap:8px; margin-bottom:14px; align-items:center; }
+.qvm-toolbar .ep-input { max-width:320px; }
+.qvm-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; }
+.qvm-card { display:flex; flex-direction:column; gap:6px; padding:10px; background:var(--bg-t);
+  border:1px solid var(--bd); border-radius:var(--radius-md); min-width:0; }
+.qvm-card img { width:100%; height:110px; object-fit:contain; background:var(--bg-s); border-radius:var(--radius-xs); }
+.qvm-desc { font-size:12px; color:var(--tx-p); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.qvm-tags { display:flex; flex-wrap:wrap; gap:4px; min-height:18px; }
+.qvm-tag { font-size:10px; padding:2px 8px; border-radius:999px; background:var(--accent-soft); color:var(--accent); }
+.qvm-acts { display:flex; gap:6px; }
+.qvm-acts .btn { flex:1; padding:4px 6px; font-size:11px; }
+.qvm-empty { grid-column:1/-1; padding:36px; text-align:center; color:var(--tx-s); }
+"""
+
+_JS = """
+var QvqMemesView = {
+  _inited: false, _timer: 0,
+  init: function () {
+    if (this._inited) return; // loader 每次开 tab 都执行：幂等
+    this._inited = true;
+    var self = this;
+    var search = document.getElementById("qvm-search");
+    if (search) search.addEventListener("input", function () {
+      clearTimeout(self._timer);
+      self._timer = setTimeout(function () { self.render(search.value.trim()); }, 300);
+    });
+    var add = document.getElementById("qvm-add");
+    if (add) add.addEventListener("click", function () { self.openAdd(); });
+    this.render("");
+  },
+  t: function (k) {
+    var zh = (navigator.language || "zh").indexOf("zh") === 0;
+    var dict = zh ? {
+      search: "搜索描述/标签…", add: "收录", empty: "表情包库是空的：群里发图会自动收录，或点「收录」手动添加。",
+      edit: "编辑", del: "删除", auto: "AI 打标", del_confirm: "删除这条表情包？本地文件一并删除。",
+      desc: "描述", tags: "标签（空格分隔）", untagged: "未分类", saved: "已保存", deleted: "已删除",
+      tagged: "已打标", add_url: "图片 URL", add_desc: "描述（留空则 AI 打标）",
+      add_hint: "desc/tags 留空将走视觉模型自动打标签。",
+      stat_total: "总数", stat_cap: "上限", stat_untagged: "未分类", stat_today: "今日",
+      save: "保存", cancel: "取消", err: "出错", unavailable: "库不可用（视觉模型或存储异常）"
+    } : {
+      search: "Search description/tags…", add: "Add", empty: "Library is empty: chat images are collected automatically, or click Add.",
+      edit: "Edit", del: "Delete", auto: "AI tag", del_confirm: "Delete this sticker? The local file is removed too.",
+      desc: "Description", tags: "Tags (space separated)", untagged: "untagged", saved: "Saved", deleted: "Deleted",
+      tagged: "Tagged", add_url: "Image URL", add_desc: "Description (empty = AI tagging)",
+      add_hint: "Empty desc/tags triggers automatic vision tagging.",
+      stat_total: "Total", stat_cap: "Capacity", stat_untagged: "Untagged", stat_today: "Today",
+      save: "Save", cancel: "Cancel", err: "Error", unavailable: "Library unavailable"
+    };
+    return dict[k] || k;
+  },
+  headers: function () { return { "Authorization": "Bearer " + (localStorage.getItem(TK) || "") }; },
+  imgSrc: function (id) { return "/QvQMemes/api/img?id=" + encodeURIComponent(id) + "&token=" + encodeURIComponent(localStorage.getItem(TK) || ""); },
+  post: function (path, body) {
+    return fetch(path, { method: "POST",
+      headers: Object.assign({ "Content-Type": "application/json" }, this.headers()),
+      body: JSON.stringify(body) }).then(function (r) { return r.json(); });
+  },
+  render: function (query) {
+    var self = this;
+    var grid = document.getElementById("qvm-grid");
+    if (!grid) return;
+    fetch("/QvQMemes/api/data?query=" + encodeURIComponent(query || ""), { headers: this.headers() })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!grid) return;
+        if (data.available === false) {
+          grid.innerHTML = '<div class="qvm-empty">' + esc(data.error || self.t("unavailable")) + "</div>";
+          return;
+        }
+        var st = data.stats || {};
+        var stats = [["stat_total", st.total], ["stat_cap", st.capacity], ["stat_untagged", st.untagged], ["stat_today", st.today]]
+          .filter(function (p) { return p[1] != null; })
+          .map(function (p) {
+            return '<div class="stat-card"><div class="stat-meta"><span class="stat-val">' + esc(p[1]) +
+              '</span><span class="stat-label">' + esc(self.t(p[0])) + "</span></div></div>";
+          }).join("");
+        var statsBox = document.getElementById("qvm-stats");
+        if (statsBox) statsBox.innerHTML = stats;
+        var items = data.items || [];
+        if (!items.length) { grid.innerHTML = '<div class="qvm-empty">' + esc(self.t("empty")) + "</div>"; return; }
+        grid.innerHTML = items.map(function (it) {
+          var tags = (it.tags || []).map(function (tg) { return '<span class="qvm-tag">' + esc(tg) + "</span>"; }).join("");
+          var desc = it.desc || self.t("untagged");
+          return '<div class="qvm-card" data-id="' + esc(it.id) + '">' +
+            '<img loading="lazy" src="' + self.imgSrc(it.id) + '" alt=""/>' +
+            '<div class="qvm-desc" title="' + esc(desc) + '">' + esc(desc) + "</div>" +
+            '<div class="qvm-tags">' + tags + "</div>" +
+            '<div class="qvm-acts"><button class="btn btn-secondary" data-act="edit">' + esc(self.t("edit")) + "</button>" +
+            '<button class="btn btn-secondary" data-act="auto">' + esc(self.t("auto")) + "</button>" +
+            '<button class="btn btn-danger" data-act="del">' + esc(self.t("del")) + "</button></div></div>";
+        }).join("");
+        grid.querySelectorAll(".qvm-card").forEach(function (card) {
+          var id = card.getAttribute("data-id");
+          var item = items.filter(function (x) { return String(x.id) === String(id); })[0] || {};
+          card.querySelector('[data-act="edit"]').addEventListener("click", function () { self.openEditor(item); });
+          card.querySelector('[data-act="del"]').addEventListener("click", function () {
+            confirm2(self.t("del_confirm"), "").then(function (ok) {
+              if (!ok) return;
+              self.post("/QvQMemes/api/delete", { id: id }).then(function (r) {
+                if (r && r.ok) { toast(self.t("deleted"), "ok"); self.render(document.getElementById("qvm-search").value.trim()); }
+                else { toast((r && r.error) || self.t("err"), "er"); }
+              });
+            });
+          });
+          card.querySelector('[data-act="auto"]').addEventListener("click", function () {
+            var btn = card.querySelector('[data-act="auto"]');
+            btn.disabled = true;
+            self.post("/QvQMemes/api/autofill", { id: id }).then(function (r) {
+              btn.disabled = false;
+              if (r && r.ok) { toast(self.t("tagged") + ": " + (r.desc || ""), "ok"); self.render(document.getElementById("qvm-search").value.trim()); }
+              else { toast((r && r.error) || self.t("err"), "er"); }
+            }, function () { btn.disabled = false; });
+          });
+        });
+      });
+  },
+  modal: function (title, bodyHtml, onSave) {
+    var mask = document.createElement("div");
+    mask.className = "modal-overlay show";
+    mask.innerHTML = '<div class="modal-box"><div class="modal-title">' + esc(title) + "</div>" +
+      '<div class="modal-text">' + bodyHtml + "</div>" +
+      '<div class="modal-actions"><button class="btn btn-secondary" data-c>' + esc(this.t("cancel")) + "</button>" +
+      '<button class="btn btn-primary" data-s>' + esc(this.t("save")) + "</button></div></div>";
+    document.body.appendChild(mask);
+    var self = this;
+    mask.querySelector("[data-c]").addEventListener("click", function () { mask.remove(); });
+    mask.querySelector("[data-s]").addEventListener("click", function () { onSave(mask, function () { mask.remove(); }); });
+    return mask;
+  },
+  openEditor: function (item) {
+    var self = this;
+    this.modal(this.t("edit"),
+      '<div class="hint">' + esc(this.t("desc")) + '</div><input id="qvm-m-desc" class="ep-input" style="width:100%" value="' + esc(item.desc || "") + '"/>' +
+      '<div class="hint">' + esc(this.t("tags")) + '</div><input id="qvm-m-tags" class="ep-input" style="width:100%;margin-bottom:6px" value="' + esc((item.tags || []).join(" ")) + '"/>',
+      function (mask, close) {
+        self.post("/QvQMemes/api/save", { id: item.id, desc: mask.querySelector("#qvm-m-desc").value, tags: mask.querySelector("#qvm-m-tags").value })
+          .then(function (r) {
+            if (r && r.ok) { toast(self.t("saved"), "ok"); close(); self.render(document.getElementById("qvm-search").value.trim()); }
+            else { toast((r && r.error) || self.t("err"), "er"); }
+          });
+      });
+  },
+  openAdd: function () {
+    var self = this;
+    this.modal(this.t("add"),
+      '<div class="hint">' + esc(this.t("add_url")) + '</div><input id="qvm-m-url" class="ep-input" style="width:100%" placeholder="https://…/sticker.png"/>' +
+      '<div class="hint">' + esc(this.t("desc")) + '</div><input id="qvm-m-desc" class="ep-input" style="width:100%" placeholder="' + esc(this.t("add_desc")) + '"/>' +
+      '<div class="hint">' + esc(this.t("tags")) + '</div><input id="qvm-m-tags" class="ep-input" style="width:100%;margin-bottom:6px" placeholder="tag1 tag2"/>' +
+      '<div class="hint">' + esc(this.t("add_hint")) + "</div>",
+      function (mask, close) {
+        var url = mask.querySelector("#qvm-m-url").value.trim();
+        if (!url) return;
+        self.post("/QvQMemes/api/save", { url: url, desc: mask.querySelector("#qvm-m-desc").value, tags: mask.querySelector("#qvm-m-tags").value })
+          .then(function (r) {
+            if (r && r.ok) { close(); self.render(""); }
+            else { toast((r && (r.error || r.message)) || self.t("err"), "er"); }
+          });
+      });
+  }
+};
+function QvqMemesViewInit() { QvqMemesView.init(); }
+"""
+
 VIEW_TITLES = {"zh": "表情包管理", "zh-TW": "表情包管理", "en": "Sticker Manager",
                "ja": "スタンプ管理", "ru": "Менеджер стикеров"}
 
@@ -356,17 +249,21 @@ class DashboardIntegration:
         if host is None:
             return False
         try:
+# 内联模式：页面直接活在宿主 Dashboard DOM 里，复用原生组件（btn/card/stat-grid）
+# 与主题 token（--bg-t/--accent/--bd...），不再有独立 iframe 样式
             host.register_view(
                 id=VIEW_ID,
                 title=VIEW_TITLES["zh"],
                 titles=dict(VIEW_TITLES),
                 icon_svg=ICON_SVG,
-                iframe_url="/QvQMemes/view",
+                html_content=_HTML,
+                js_content=_JS,
+                css_content=_CSS,
+                loader="QvqMemesViewInit",
                 group="qvq",
                 group_title="QvQ 生态",
                 group_title_en="QvQ Ecosystem",
             )
-            self._router().register_http_route("QvQMemes", "/view", self._view_page, methods=["GET"])
             self._router().register_http_route("QvQMemes", "/api/auth", self._guard(self._api_auth), methods=["GET"])
             self._router().register_http_route("QvQMemes", "/api/data", self._guard(self._api_data), methods=["GET"])
             self._router().register_http_route("QvQMemes", "/api/save", self._guard(self._api_save), methods=["POST"])
@@ -375,7 +272,7 @@ class DashboardIntegration:
             self._router().register_http_route("QvQMemes", "/api/img", self._guard(self._api_img), methods=["GET"])
             self._registered = True
             self._routes = [
-                ("/view", "GET"), ("/api/auth", "GET"), ("/api/data", "GET"),
+                ("/api/auth", "GET"), ("/api/data", "GET"),
                 ("/api/save", "POST"), ("/api/delete", "POST"),
                 ("/api/autofill", "POST"), ("/api/img", "GET"),
             ]
@@ -476,11 +373,6 @@ class DashboardIntegration:
         return wrapped
 
     # ---------- Handlers ----------
-
-    async def _view_page(self, request):
-        from starlette.responses import HTMLResponse
-
-        return HTMLResponse(VIEW_HTML, headers={"Cache-Control": "no-store"})
 
     async def _api_auth(self, request):
         return {"ok": True}

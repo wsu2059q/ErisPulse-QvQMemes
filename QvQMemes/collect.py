@@ -319,6 +319,15 @@ class Collector:
             self.logger.info(texts.t("tag_failed", id=entry_id))
             self.logger.debug(f"describe_image error: {e}")
             return
+        stripped = str(text or "").strip()
+        first_line = stripped.splitlines()[0].strip().upper() if stripped else ""
+# 视觉拒收：截图/聊天记录/新闻长图等非表情内容——第一行 NOT_STICKER 即删条目
+        if first_line.startswith("NOT_STICKER") or "NOT_STICKER" in first_line:
+            reason = " ".join(stripped.splitlines()[1:3]).strip()[:80]
+            self.library.remove(entry_id, delete_file=True)
+            self.logger.info(texts.t("vision_rejected",
+                                     desc=reason or stripped[:60] or "screenshot"))
+            return
         desc, tags = parse_vision_result(text)
         if not desc and not tags:
             self.logger.info(texts.t("tag_failed", id=entry_id))
