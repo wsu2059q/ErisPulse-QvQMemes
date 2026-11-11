@@ -130,15 +130,21 @@ STRINGS: dict[str, dict[str, str]] = {
     "vision_prompt": {
         "zh-CN": "判断这张图是不是表情包（meme/表情图/梗图：卡通角色、动物萌宠、搞笑人物，表达情绪可复用）。"
                  "如果不是——游戏截图、聊天记录、网页/新闻截图、长图文章、普通照片、二维码等——只在第一行输出 NOT_STICKER。"
+                 "以下内容即使形式上是梗图也一律不收录，只在第一行输出 NOT_STICKER："
+                 "侮辱谩骂/人身攻击（含脏话、粗口字样）、政治敏感内容（含历史政治人物恶搞）、"
+                 "色情低俗、血腥暴力、歧视侮辱特定群体（地域/性别/民族等）。"
                  "如果是：第一行用不超过20字描述内容与情绪，第二行给3-6个空格分隔的适用场景标签（如：开心 调侃 感谢 疑惑 撒娇 嘲讽）",
         "en": "Decide whether this image is a meme/sticker (cartoon, cute animal, funny face - reusable emotion expressions). "
               "If NOT - game screenshots, chat logs, web/news screenshots, long-form articles, plain photos, QR codes - "
               "output exactly NOT_STICKER on the first line. "
+              "Never include the following even in meme form - output NOT_STICKER on the first line: insults/profanity, "
+              "politically sensitive content (incl. parodies of political figures), pornographic or vulgar content, "
+              "gore/violence, discrimination against any group (regional/gender/ethnic). "
               "If it is: first line describes content and emotion in at most 20 words, second line gives 3-6 space-separated usage tags (e.g. happy teasing thanks confused cute sarcastic)",
     },
     "vision_rejected": {
-        "zh-CN": "已拒收非表情包图片（{desc}）",
-        "en": "Rejected non-sticker image ({desc})",
+        "zh-CN": "已拒收不收录的图片（{desc}）",
+        "en": "Rejected non-includable image ({desc})",
     },
     # ---- qvq_settings（插件设置注册，plugin_config 约定） ----
     "settings_title": {
