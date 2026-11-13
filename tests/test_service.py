@@ -228,11 +228,11 @@ class TestMeta:
                          "sticker_add", "sticker_list", "sticker_update",
                          "sticker_remove", "sticker_image",
                          "qvq_settings", "qvq_schemas", "qvq_access",
-                         "qvq_extensions"]
+                         "qvq_extensions", "qvq_media"]
         send = next(s for s in SERVICES if s["name"] == "send_sticker")
         assert send["description"] == ("根据语义描述从表情包库挑选并发送表情包；"
                                        "适合轻松/调侃/情绪表达场景，正式任务慎用")
-        assert QvQMemes.__version__ == "0.1.4"
+        assert QvQMemes.__version__ == "0.1.6"
 
     def test_coerce(self):
         assert Main._coerce("10", "int") == 10
@@ -246,7 +246,8 @@ class TestMeta:
 async def test_qvq_extensions_injects_sticker_usage_prompt(tmp_path):
     main = make_main(tmp_path)
     data = await main.qvq_extensions()
-    assert data["prompts"] and "send_sticker" in data["prompts"][0]["text"]
+    text = data["prompts"][0]["text"]
+    assert "[表情:" in text and "eco_QvQMemes_" in text
 
 
 async def test_send_sticker_downloads_url_only_entry(tmp_path, monkeypatch):
@@ -295,3 +296,9 @@ async def test_send_sticker_failed_result_is_reported(tmp_path):
     result = await main.send_sticker("猫", "onebot11", "1")
     assert "失败" in result and "1400" in result
     assert (lib.get(str(entry["id"])) or {}).get("uses", 0) == 0
+
+
+async def test_qvq_media_declares_sticker_marker(tmp_path):
+    main = make_main(tmp_path)
+    data = await main.qvq_media()
+    assert data["sticker"] == {"service": "send_sticker", "arg": "query", "mode": "send"}

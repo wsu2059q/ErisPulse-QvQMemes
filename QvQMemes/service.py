@@ -259,6 +259,10 @@ class ServiceMixin:
         from .Main import EXTENSION_PROMPTS
 
         return {"prompts": [dict(item) for item in EXTENSION_PROMPTS]}
+
+    async def qvq_media(self, **_) -> dict:
+        """声明承接 QvQChat 回复内联标记 [表情:关键词]（QvQChat 4.6.7+）。"""
+        return {"sticker": {"service": "send_sticker", "arg": "query", "mode": "send"}}
     # ==================== 库管理服务（QvQChat Dashboard 表情包视窗代理调用） ====================
 
     async def sticker_list(self, query: str = "", limit: int = 300, **_) -> dict:

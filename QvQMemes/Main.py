@@ -45,7 +45,7 @@ from .collect import Collector
 from .library import StickerLibrary
 from .service import ServiceMixin
 
-__version__ = "0.1.4"
+__version__ = "0.1.6"
 
 OBSERVE_EVENT = "qvq.observe"
 
@@ -113,6 +113,11 @@ SERVICES = [
         "description": "约定服务：向 QvQChat 注入表情包使用建议（提示词），由 AI 自行判断何时发",
         "signature": "() -> dict",
     },
+    {
+        "name": "qvq_media",
+        "description": "约定服务：声明本模块承接回复内联标记 [表情:关键词]（QvQChat 投递层据此换取真实表情包；未声明时宿主按 send_sticker 服务名兜底）",
+        "signature": "() -> dict",
+    },
 ]
 
 # 注入 QvQChat 系统提示的使用建议：只给判断依据，是否发送由 AI 决定
@@ -122,8 +127,9 @@ EXTENSION_PROMPTS = [
             "发表情包（原生能力）：发不发由你自己判断——轻松、调侃、情绪表达、接梗、"
             "斗图氛围合适就可以发一张，让聊天更像活人；正式任务、长文说明、报错排查"
             "和需要精确信息的场合不要发；同一话题不要连发。"
-            "发法一步：表情包桥接工具（eco_QvQMemes_ 开头，如 send_sticker），"
-            "query 写情绪或画面（如「无语」「猫猫疑惑」「委婉地感谢」）；"
+            "首选写法：直接在回复里写 [表情:关键词]（如「[表情:无语]」「[表情:猫猫疑惑]」），"
+            "投递层会换成真实表情包，不用调用工具；只有需要检索库里有什么、做统计或"
+            "手动收录时才用表情包桥接工具（eco_QvQMemes_ 开头）。"
             "库为空或没有匹配就照实说，不要硬造结果，也不要改用别的发图方式凑数。"
         ),
         "priority": 4,
